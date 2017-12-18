@@ -138,73 +138,73 @@ namespace ExcelTools
             //合并为一个文件
             try
             {
-                using (var newexcelPackage = new ExcelPackage())
-                {
-                    for (var i = 1; i <= maxSheetCount; i++)
-                    {
-                        var newExcelName = string.Empty;
+                var newexcelPackage = new ExcelPackage();
 
-                        foreach (var fileInfo in fileInfos)
+                for (var i = 1; i <= maxSheetCount; i++)
+                {
+                    var newExcelName = string.Empty;
+
+                    foreach (var fileInfo in fileInfos)
+                    {
+                        using (var excelPackage = new ExcelPackage(fileInfo))
                         {
-                            using (var excelPackage = new ExcelPackage(fileInfo))
+                            if (excelPackage.Workbook.Worksheets.Count < i)
                             {
-                                if (excelPackage.Workbook.Worksheets.Count < i)
+                                continue;
+                            }
+                            var worksheet = excelPackage.Workbook.Worksheets[i];
+                            if (CheckBox_OneSheet.Checked)
+                            {
+                                if (newexcelPackage.Workbook.Worksheets.Count > 0)
                                 {
-                                    continue;
-                                }
-                                var worksheet = excelPackage.Workbook.Worksheets[i];
-                                if (CheckBox_OneSheet.Checked)
-                                {
-                                    if (newexcelPackage.Workbook.Worksheets.Count > 0)
-                                    {
-                                        newexcelPackage.Workbook.Worksheets.First().Combine(worksheet, (int)numUdSkipRows.Value);
-                                    }
-                                    else
-                                    {
-                                        newexcelPackage.Workbook.Worksheets.Add("Sheet", worksheet);
-                                        newExcelName = worksheet.Name;
-                                    }
+                                    newexcelPackage.Workbook.Worksheets.First()
+                                        .Combine(worksheet, (int)numUdSkipRows.Value);
                                 }
                                 else
                                 {
-                                    newexcelPackage.Workbook.Worksheets.Add(fileInfo.Name.Replace(fileInfo.Extension, "") + " " + worksheet.Name, worksheet);
-                                    if (string.IsNullOrEmpty(newExcelName))
-                                    {
-                                        newExcelName = worksheet.Name;
-                                    }
+                                    newexcelPackage.Workbook.Worksheets.Add("Sheet", worksheet);
+                                    newExcelName = worksheet.Name;
+                                }
+                            }
+                            else
+                            {
+                                newexcelPackage.Workbook.Worksheets.Add(
+                                    fileInfo.Name.Replace(fileInfo.Extension, "") + " " + worksheet.Name, worksheet);
+                                if (string.IsNullOrEmpty(newExcelName))
+                                {
+                                    newExcelName = worksheet.Name;
                                 }
                             }
                         }
-
-                        if (!CheckBox_OneFile.Checked)
-                        {
-                            newExcelName += excelExt;
-                            var filePath = Path.Combine(_targetMergerSaveFolderPath, newExcelName);
-                            while (File.Exists(filePath))
-                            {
-                                filePath = Path.Combine(_targetMergerSaveFolderPath, i + "-" + newExcelName);
-                            }
-                            newexcelPackage.SaveAs(new FileInfo(filePath));
-                            foreach (var worksheet in newexcelPackage.Workbook.Worksheets)
-                            {
-                                newexcelPackage.Workbook.Worksheets.Delete(worksheet);
-                            }
-                        }
-
-                        // 更新进度条
-                        ExcelStatusProgressBar.Value = Convert.ToInt32(Math.Floor(i * 100.0 / maxSheetCount));
                     }
-                    if (CheckBox_OneFile.Checked)
+
+                    if (!CheckBox_OneFile.Checked)
                     {
-                        var newExcelName = $"{DateTime.Now:yyyy-MM-dd HH-mm}合并所有Sheet{excelExt}";
+                        newExcelName += excelExt;
                         var filePath = Path.Combine(_targetMergerSaveFolderPath, newExcelName);
                         while (File.Exists(filePath))
                         {
-                            filePath = Path.Combine(_targetMergerSaveFolderPath, $"{DateTime.Now.Millisecond}-{newExcelName}");
+                            filePath = Path.Combine(_targetMergerSaveFolderPath, i + "-" + newExcelName);
                         }
                         newexcelPackage.SaveAs(new FileInfo(filePath));
+                        newexcelPackage = new ExcelPackage();
                     }
+
+                    // 更新进度条
+                    ExcelStatusProgressBar.Value = Convert.ToInt32(Math.Floor(i * 100.0 / maxSheetCount));
                 }
+                if (CheckBox_OneFile.Checked)
+                {
+                    var newExcelName = $"{DateTime.Now:yyyy-MM-dd HH-mm}合并所有Sheet{excelExt}";
+                    var filePath = Path.Combine(_targetMergerSaveFolderPath, newExcelName);
+                    while (File.Exists(filePath))
+                    {
+                        filePath = Path.Combine(_targetMergerSaveFolderPath,
+                            $"{DateTime.Now.Millisecond}-{newExcelName}");
+                    }
+                    newexcelPackage.SaveAs(new FileInfo(filePath));
+                }
+                newexcelPackage.Dispose();
             }
             catch (Exception exception)
             {
