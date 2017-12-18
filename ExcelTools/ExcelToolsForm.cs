@@ -123,6 +123,7 @@ namespace ExcelTools
             }
             var maxSheetCount = 0;
             var fileInfos = new List<FileInfo>();
+            
             foreach (var filePath in filePaths)
             {
                 var fileInfo = new FileInfo(filePath);
@@ -157,8 +158,7 @@ namespace ExcelTools
                             {
                                 if (newexcelPackage.Workbook.Worksheets.Count > 0)
                                 {
-                                    newexcelPackage.Workbook.Worksheets.First()
-                                        .Combine(worksheet, (int)numUdSkipRows.Value);
+                                    newexcelPackage.Workbook.Worksheets.First().Combine(worksheet, (int)numUdSkipRows.Value);
                                 }
                                 else
                                 {
@@ -168,8 +168,7 @@ namespace ExcelTools
                             }
                             else
                             {
-                                newexcelPackage.Workbook.Worksheets.Add(
-                                    fileInfo.Name.Replace(fileInfo.Extension, "") + " " + worksheet.Name, worksheet);
+                                newexcelPackage.Workbook.Worksheets.Add(fileInfo.Name.Replace(fileInfo.Extension, "") + " " + worksheet.Name, worksheet);
                                 if (string.IsNullOrEmpty(newExcelName))
                                 {
                                     newExcelName = worksheet.Name;
@@ -199,8 +198,7 @@ namespace ExcelTools
                     var filePath = Path.Combine(_targetMergerSaveFolderPath, newExcelName);
                     while (File.Exists(filePath))
                     {
-                        filePath = Path.Combine(_targetMergerSaveFolderPath,
-                            $"{DateTime.Now.Millisecond}-{newExcelName}");
+                        filePath = Path.Combine(_targetMergerSaveFolderPath, $"{DateTime.Now.Millisecond}-{newExcelName}");
                     }
                     newexcelPackage.SaveAs(new FileInfo(filePath));
                 }
