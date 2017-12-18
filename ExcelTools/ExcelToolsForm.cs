@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using OfficeOpenXml;
 
@@ -110,8 +111,10 @@ namespace ExcelTools
             MergerSheetFolderBtn.Enabled = false;
             MergerSheetSaveFolderBtn.Enabled = false;
             MergerSheetBtn.Enabled = false;
+            CheckBox_OneFile.Enabled = false;
+            CheckBox_OneSheet.Enabled = false;
+            numUdSkipRows.Enabled = false;
             ExcelStatusProgressBar.Value = 0;
-            const string excelExt = ".xlsx";
             var filePaths = Directory.GetFiles(_targetMergerSourceFolderPath, "*.xlsx");
             if (filePaths.Length == 0)
             {
@@ -121,99 +124,101 @@ namespace ExcelTools
                 MergerSheetBtn.Enabled = false;
                 return;
             }
-            var maxSheetCount = 0;
-            var fileInfos = new List<FileInfo>();
-            
-            foreach (var filePath in filePaths)
-            {
-                var fileInfo = new FileInfo(filePath);
-                fileInfos.Add(fileInfo);
-                using (var excelPackage = new ExcelPackage(fileInfo))
-                {
-                    if (maxSheetCount < excelPackage.Workbook.Worksheets.Count)
-                    {
-                        maxSheetCount = excelPackage.Workbook.Worksheets.Count;
-                    }
-                }
-            }
-            //合并为一个文件
             try
             {
-                var newexcelPackage = new ExcelPackage();
-
-                for (var i = 1; i <= maxSheetCount; i++)
-                {
-                    var newExcelName = string.Empty;
-
-                    foreach (var fileInfo in fileInfos)
-                    {
-                        using (var excelPackage = new ExcelPackage(fileInfo))
-                        {
-                            if (excelPackage.Workbook.Worksheets.Count < i)
-                            {
-                                continue;
-                            }
-                            var worksheet = excelPackage.Workbook.Worksheets[i];
-                            if (CheckBox_OneSheet.Checked)
-                            {
-                                if (newexcelPackage.Workbook.Worksheets.Count > 0)
-                                {
-                                    newexcelPackage.Workbook.Worksheets.First().Combine(worksheet, (int)numUdSkipRows.Value);
-                                }
-                                else
-                                {
-                                    newexcelPackage.Workbook.Worksheets.Add("Sheet", worksheet);
-                                    newExcelName = worksheet.Name;
-                                }
-                            }
-                            else
-                            {
-                                newexcelPackage.Workbook.Worksheets.Add(fileInfo.Name.Replace(fileInfo.Extension, "") + " " + worksheet.Name, worksheet);
-                                if (string.IsNullOrEmpty(newExcelName))
-                                {
-                                    newExcelName = worksheet.Name;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!CheckBox_OneFile.Checked)
-                    {
-                        newExcelName += excelExt;
-                        var filePath = Path.Combine(_targetMergerSaveFolderPath, newExcelName);
-                        while (File.Exists(filePath))
-                        {
-                            filePath = Path.Combine(_targetMergerSaveFolderPath, i + "-" + newExcelName);
-                        }
-                        newexcelPackage.SaveAs(new FileInfo(filePath));
-                        newexcelPackage = new ExcelPackage();
-                    }
-
-                    // 更新进度条
-                    ExcelStatusProgressBar.Value = Convert.ToInt32(Math.Floor(i * 100.0 / maxSheetCount));
-                }
-                if (CheckBox_OneFile.Checked)
-                {
-                    var newExcelName = $"{DateTime.Now:yyyy-MM-dd HH-mm}合并所有Sheet{excelExt}";
-                    var filePath = Path.Combine(_targetMergerSaveFolderPath, newExcelName);
-                    while (File.Exists(filePath))
-                    {
-                        filePath = Path.Combine(_targetMergerSaveFolderPath, $"{DateTime.Now.Millisecond}-{newExcelName}");
-                    }
-                    newexcelPackage.SaveAs(new FileInfo(filePath));
-                }
-                newexcelPackage.Dispose();
+                var task = Task.Run(() => MergerExcels(filePaths));
             }
             catch (Exception exception)
             {
                 MessageBox.Show($@"执行错误: {exception.Message}");
+                MergerSheetFolderBtn.Enabled = true;
+                MergerSheetSaveFolderBtn.Enabled = true;
+                MergerSheetBtn.Enabled = true;
+                CheckBox_OneFile.Enabled = true;
+                CheckBox_OneSheet.Enabled = true;
+                numUdSkipRows.Enabled = true;
                 return;
             }
-            ExcelStatusProgressBar.Value = 100;
-            MessageBox.Show(@"Excel合并完成");
-            MergerSheetFolderBtn.Enabled = true;
-            MergerSheetSaveFolderBtn.Enabled = true;
-            MergerSheetBtn.Enabled = true;
+        }
+
+        /// <summary>
+        /// 合并Excel
+        /// </summary>
+        /// <param name="filePaths">Excel文件路径列表</param>
+        private void MergerExcels(IReadOnlyList<string> filePaths)
+        {
+            const string excelExt = ".xlsx";
+            var excelPackageDicts = new Dictionary<string, ExcelPackage>();
+            for (var i = 0; i < filePaths.Count; i++)
+            {
+                var fileInfo = new FileInfo(filePaths[i]);
+                using (var excelPackage = new ExcelPackage(fileInfo))
+                {
+                    for (var sheetIndex = 1; sheetIndex <= excelPackage.Workbook.Worksheets.Count; sheetIndex++)
+                    {
+                        var workSheet = excelPackage.Workbook.Worksheets[sheetIndex];
+                        var excelName = workSheet.Name;
+                        var excelIndex = sheetIndex - 1;
+                        if (CheckBox_OneFile.Checked)
+                        {
+                            excelName = $@"{DateTime.Now:yyyy-MM-dd HH-mm} 合并所有文件";
+                            excelIndex = 0;
+                        }
+                        var currentExcelPackage = excelPackageDicts.Values.ElementAtOrDefault(excelIndex);
+                        if (currentExcelPackage == null)
+                        {
+                            currentExcelPackage = new ExcelPackage();
+                            excelPackageDicts.Add(excelName, currentExcelPackage);
+                        }
+
+                        if (CheckBox_OneSheet.Checked)
+                        {
+                            if (currentExcelPackage.Workbook.Worksheets.Count > 0)
+                            {
+                                currentExcelPackage.Workbook.Worksheets.First().Combine(workSheet, (int)numUdSkipRows.Value);
+                            }
+                            else
+                            {
+                                currentExcelPackage.Workbook.Worksheets.Add("Sheet", workSheet);
+                            }
+                        }
+                        else
+                        {
+                            currentExcelPackage.Workbook.Worksheets.Add(fileInfo.Name.Replace(fileInfo.Extension, "") + " " + workSheet.Name, workSheet);
+                        }
+                    }
+                }
+
+                var progressValue = Convert.ToInt32(Math.Floor(i * 90.0 / filePaths.Count));
+                this.Invoke((MethodInvoker)(() => ExcelStatusProgressBar.Value = progressValue));
+            }
+            var fileCount = 0;
+            foreach (var excelPackageDict in excelPackageDicts)
+            {
+                var filePath = Path.Combine(_targetMergerSaveFolderPath, excelPackageDict.Key + excelExt);
+                while (File.Exists(filePath))
+                {
+                    filePath = Path.Combine(_targetMergerSaveFolderPath, $"{excelPackageDict.Key}-{DateTime.Now.Millisecond}{excelExt}");
+                }
+                excelPackageDict.Value.SaveAs(new FileInfo(filePath));
+                excelPackageDict.Value.Dispose();
+
+                fileCount++;
+                var progressValue = 90 + Convert.ToInt32(Math.Floor(fileCount * 10.0 / excelPackageDicts.Count));
+                this.Invoke((MethodInvoker)(() => ExcelStatusProgressBar.Value = progressValue));
+            }
+
+            this.Invoke((MethodInvoker)(() =>
+            {
+                ExcelStatusProgressBar.Value = 100;
+                MessageBox.Show(@"Excel合并完成");
+                MergerSheetFolderBtn.Enabled = true;
+                MergerSheetSaveFolderBtn.Enabled = true;
+                MergerSheetBtn.Enabled = true;
+                CheckBox_OneFile.Enabled = true;
+                CheckBox_OneSheet.Enabled = true;
+                numUdSkipRows.Enabled = true;
+            }));
         }
 
         #endregion
@@ -298,42 +303,58 @@ namespace ExcelTools
             BtnSelectFile.Enabled = false;
             BtnSelectFolder.Enabled = false;
             ExcelStatusProgressBar.Value = 0;
-            var fileInfo = new FileInfo(_targetFilePath);
-            var excelExt = Path.GetExtension(_targetFilePath);
             try
             {
-                using (var excelPackage = new ExcelPackage(fileInfo))
-                {
-                    var workSheetCount = excelPackage.Workbook.Worksheets.Count;
-                    for (var i = 1; i < workSheetCount; i++)
-                    {
-                        var worksheet = excelPackage.Workbook.Worksheets[i];
-                        var newExcelName = worksheet.Name + excelExt;
-
-                        using (var newexcelPackage = new ExcelPackage())
-                        {
-                            var filePath = Path.Combine(_targetFolderPath, newExcelName);
-                            while (File.Exists(filePath))
-                            {
-                                filePath = Path.Combine(_targetFolderPath, i + "-" + newExcelName);
-                            }
-                            newexcelPackage.Workbook.Worksheets.Add(newExcelName, worksheet);
-                            newexcelPackage.SaveAs(new FileInfo(filePath));
-                        }
-                        ExcelStatusProgressBar.Value = Convert.ToInt32(Math.Floor(i * 100.0 / workSheetCount));
-                    }
-                }
+                Task.Run(() => SplitExcel(_targetFilePath));
             }
             catch (Exception exception)
             {
                 MessageBox.Show($@"执行错误: {exception.Message}");
+                BtnSplitExcel.Enabled = true;
+                BtnSelectFile.Enabled = true;
+                BtnSelectFolder.Enabled = true;
                 return;
             }
-            ExcelStatusProgressBar.Value = 100;
-            MessageBox.Show(@"Excel拆分完成");
-            BtnSplitExcel.Enabled = true;
-            BtnSelectFile.Enabled = true;
-            BtnSelectFolder.Enabled = true;
+        }
+
+        /// <summary>
+        /// 拆分Excel
+        /// </summary>
+        /// <param name="sourceFilePath"></param>
+        private void SplitExcel(string sourceFilePath)
+        {
+            var fileInfo = new FileInfo(sourceFilePath);
+            var excelExt = Path.GetExtension(_targetFilePath);
+            using (var excelPackage = new ExcelPackage(fileInfo))
+            {
+                var workSheetCount = excelPackage.Workbook.Worksheets.Count;
+                for (var i = 1; i < workSheetCount; i++)
+                {
+                    var worksheet = excelPackage.Workbook.Worksheets[i];
+                    var newExcelName = worksheet.Name + excelExt;
+
+                    using (var newexcelPackage = new ExcelPackage())
+                    {
+                        var filePath = Path.Combine(_targetFolderPath, newExcelName);
+                        while (File.Exists(filePath))
+                        {
+                            filePath = Path.Combine(_targetFolderPath, i + "-" + newExcelName);
+                        }
+                        newexcelPackage.Workbook.Worksheets.Add(newExcelName, worksheet);
+                        newexcelPackage.SaveAs(new FileInfo(filePath));
+                    }
+                    var progressValue = Convert.ToInt32(Math.Floor(i * 100.0 / workSheetCount));
+                    this.Invoke((MethodInvoker)(() => ExcelStatusProgressBar.Value = progressValue));
+                }
+            }
+            this.Invoke((MethodInvoker)(() =>
+            {
+                ExcelStatusProgressBar.Value = 100;
+                MessageBox.Show(@"Excel拆分完成");
+                BtnSplitExcel.Enabled = true;
+                BtnSelectFile.Enabled = true;
+                BtnSelectFolder.Enabled = true;
+            }));
         }
 
         #endregion
